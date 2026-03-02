@@ -6,7 +6,16 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    roc_curve,
+    precision_recall_curve,
+    auc
+)
 
 # =========================
 # CONFIG
@@ -55,134 +64,126 @@ models = {}
 
 for path in model_paths:
     name = os.path.basename(path).replace(".h5","").lower()
-    print(f"Loading model: {name}")
+    print("Loading:", name)
     models[name] = tf.keras.models.load_model(path)
 
-print("\nModels loaded:", list(models.keys()))
+print("Loaded models:", list(models.keys()))
 
 # =========================
-# EVALUATION FUNCTION
+# EVALUATE FUNCTION
 # =========================
 
-def evaluate_dataset(data, dataset_name):
+def evaluate(data, dataset_name):
 
     results = []
 
+    y_true = data.classes
+
+    roc_plot = plt.figure()
+    pr_plot = plt.figure()
+
+    confidence_all = []
+    labels = []
+
     for model_name, model in models.items():
 
-        print(f"\nEvaluating {model_name} on {dataset_name}...")
+        print(f"Evaluating {model_name} on {dataset_name}")
 
-        probs = model.predict(data, verbose=0)
-
-        probs = probs.flatten()
+        probs = model.predict(data, verbose=0).flatten()
 
         preds = (probs > 0.5).astype(int)
 
-        y_true = data.classes
-
-        accuracy = accuracy_score(y_true, preds)
-
-        precision = precision_score(y_true, preds, zero_division=0)
-
-        recall = recall_score(y_true, preds, zero_division=0)
-
+        acc = accuracy_score(y_true, preds)
+        prec = precision_score(y_true, preds, zero_division=0)
+        rec = recall_score(y_true, preds, zero_division=0)
         f1 = f1_score(y_true, preds, zero_division=0)
 
-        try:
-            roc_auc = roc_auc_score(y_true, probs)
-        except:
-            roc_auc = 0
+        roc_auc = roc_auc_score(y_true, probs)
 
-        confidence_mean = np.mean(probs)
+        precision_curve, recall_curve, _ = precision_recall_curve(y_true, probs)
+        pr_auc = auc(recall_curve, precision_curve)
 
+        # save metrics
         results.append({
             "model": model_name,
             "dataset": dataset_name,
-            "accuracy": accuracy,
-            "precision": precision,
-            "recall": recall,
+            "accuracy": acc,
+            "precision": prec,
+            "recall": rec,
             "f1_score": f1,
             "roc_auc": roc_auc,
-            "mean_confidence": confidence_mean
+            "pr_auc": pr_auc,
+            "mean_confidence": np.mean(probs)
         })
+
+        # ROC curve
+        fpr, tpr, _ = roc_curve(y_true, probs)
+
+        plt.figure(roc_plot.number)
+        plt.plot(fpr, tpr, label=f"{model_name} (AUC={roc_auc:.2f})")
+
+        # PR curve
+        plt.figure(pr_plot.number)
+        plt.plot(recall_curve, precision_curve,
+                 label=f"{model_name} (AUC={pr_auc:.2f})")
+
+        confidence_all.append(probs)
+        labels.append(model_name)
+
+    # finalize ROC plot
+    plt.figure(roc_plot.number)
+    plt.plot([0,1],[0,1],'--')
+    plt.title(f"ROC Curve ({dataset_name})")
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.legend()
+    plt.savefig(f"{OUTPUT_DIR}/roc_curve_{dataset_name}.png")
+    plt.close()
+
+    # finalize PR plot
+    plt.figure(pr_plot.number)
+    plt.title(f"Precision-Recall Curve ({dataset_name})")
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.legend()
+    plt.savefig(f"{OUTPUT_DIR}/precision_recall_{dataset_name}.png")
+    plt.close()
+
+    # confidence boxplot
+    plt.figure()
+    plt.boxplot(confidence_all, tick_labels=labels)
+    plt.title(f"Confidence Distribution ({dataset_name})")
+    plt.savefig(f"{OUTPUT_DIR}/confidence_boxplot_{dataset_name}.png")
+    plt.close()
 
     return results
 
 
 # =========================
-# RUN EVALUATION
+# RUN
 # =========================
 
-train_results = evaluate_dataset(train_data, "train")
+train_results = evaluate(train_data, "train")
+val_results = evaluate(val_data, "val")
 
-val_results = evaluate_dataset(val_data, "val")
+df = pd.DataFrame(train_results + val_results)
 
-all_results = train_results + val_results
+df.to_csv(f"{OUTPUT_DIR}/model_comparison.csv", index=False)
 
-df = pd.DataFrame(all_results)
-
-csv_path = os.path.join(OUTPUT_DIR, "model_comparison.csv")
-
-df.to_csv(csv_path, index=False)
-
-print("\nSaved:", csv_path)
-
+print("Saved CSV comparison")
 
 # =========================
-# BAR CHART
+# BAR CHART ACCURACY
 # =========================
 
-val_df = df[df["dataset"]=="val"]
+val_df = df[df.dataset=="val"]
 
 plt.figure()
-
-plt.bar(val_df["model"], val_df["accuracy"])
-
-plt.title("Model Accuracy Comparison (Validation)")
-
+plt.bar(val_df.model, val_df.accuracy)
+plt.title("Validation Accuracy Comparison")
 plt.ylabel("Accuracy")
-
 plt.xticks(rotation=45)
-
-plt.tight_layout()
-
-plt.savefig(os.path.join(OUTPUT_DIR,"accuracy_bar_chart.png"))
-
+plt.savefig(f"{OUTPUT_DIR}/accuracy_bar.png")
 plt.close()
 
-
-# =========================
-# CONFIDENCE BOXPLOT
-# =========================
-
-confidence_data = []
-
-labels = []
-
-for model_name, model in models.items():
-
-    probs = model.predict(val_data, verbose=0).flatten()
-
-    confidence_data.append(probs)
-
-    labels.append(model_name)
-
-
-plt.figure()
-
-plt.boxplot(confidence_data, tick_labels=labels)
-
-plt.title("Confidence Distribution")
-
-plt.ylabel("Confidence")
-
-plt.xticks(rotation=45)
-
-plt.tight_layout()
-
-plt.savefig(os.path.join(OUTPUT_DIR,"confidence_boxplot.png"))
-
-plt.close()
-
-
-print("\nEvaluation complete.")
+print("All evaluation plots saved.")
