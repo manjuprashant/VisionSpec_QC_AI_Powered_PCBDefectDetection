@@ -95,37 +95,58 @@ Supports:
 # Project Structure
 
 ```
-VisionSpec_QC_GitHub_Project
+VisionSpec_QC_AI_Powered_PCBDefectDetection/
 │
-├── dataset
-│   ├── train
-│   │   ├── DEFECT
-│   │   └── OK
-│   │
-│   └── val
-│       ├── DEFECT
-│       └── OK
+├── README.md
+├── requirements.txt
+├── .gitignore
 │
-├── models
-│   ├── visionspec_qc.h5
+├── dataset/
+│   ├── train/
+│   │   ├── GOOD/
+│   │   └── DEFECT/
+│   └── val/
+│       ├── GOOD/
+│       └── DEFECT/
+│
+├── models/
+│   ├── customcnn.h5
+│   ├── efficientnetb0.h5
 │   ├── mobilenetv2.h5
 │   ├── resnet50.h5
-│   └── efficientnetb0.h5
+│   └── visionspec_qc.h5
 │
-├── scripts
-│   ├── train.py
-│   ├── evaluate.py
-│   ├── gradcam.py
-│   ├── realtime_inference.py
-│   └── realtime_dataset_inference.py
+├── scripts/
+│   ├── train.py                 ← Model training script
+│   ├── evaluate.py              ← Validation evaluation + metrics
+│   ├── realtime_inference.py    ← Dataset inference + saving results
+│   └── gradcam.py               ← Grad-CAM visualization generator
 │
-├── evaluation_outputs
-├── gradcam_outputs
-├── requirements.txt
-└── README.md
-```
+├── evaluation_outputs/          ← Model comparison outputs
+│   ├── accuracy_bar.png
+│   ├── confidence_boxplot_train.png
+│   ├── confidence_boxplot_val.png
+│   ├── model_comparison.csv
+│   ├── precision_recall_train.png
+│   ├── precision_recall_val.png
+│   ├── roc_curve_train.png
+│   └── roc_curve_val.png
+│
+├── evaluation_results/          ← Realtime dataset evaluation results
+│   ├── GOOD/                    ← Images predicted as GOOD
+│   ├── DEFECT/                  ← Images predicted as DEFECT
+│   ├── dataset_predictions.csv
+│   ├── confusion_matrix.png
+│   └── classification_report.txt
+│
+├── results/
+│   └── gradcam/
+│       ├── efficientnetb0_gradcam_...
+│       ├── mobilenetv2_gradcam_...
+│       └── resnet50_gradcam_...
+│
+└── venv/ (not tracked)
 
----
 
 # Installation
 
